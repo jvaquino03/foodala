@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Foodala",
+    "slug": "foodala-customer",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "foodala",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050505",
+    "icon": "./assets/images/foodala-logo-transparent.png",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/foodala-logo-transparent.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050505"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.foodala.customer"
+    },
+    "android": {
+      "package": "com.foodala.customer",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/foodala-logo-transparent.png",
+        "backgroundColor": "#050505"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/foodala-logo-transparent.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
