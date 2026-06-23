@@ -84,6 +84,15 @@ export function RestaurantApplicationForm() {
     setState('submitting');
     const { error } = await supabase.from('restaurant_applications').insert(payload);
 
+    // Dev-only logging (no secrets — never the anon key or tokens).
+    if (process.env.NODE_ENV === 'development') {
+      if (error) {
+        console.error('[partners/apply] insert error:', error.message, error);
+      } else {
+        console.log('[partners/apply] insert ok — application submitted.');
+      }
+    }
+
     if (error) {
       setState('error');
       setErrorMsg('Something went wrong submitting your application. Please try again.');

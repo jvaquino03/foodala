@@ -8,6 +8,19 @@ import { formatDateTime } from '@/utils/format';
 type Filter = 'all' | ApplicationStatus;
 type Load = 'loading' | 'ready' | 'unconfigured' | 'error';
 
+// Surfaced to the admin (and console in dev) so a "no rows" result is never
+// ambiguous: it could be a genuinely empty table, a missing/expired session, a
+// non-admin profile (RLS silently filters every row), or a select error.
+type Diagnostics = {
+  configured: boolean;
+  sessionExists: boolean;
+  role: string | null;
+  selectError: string | null;
+  rowCount: number;
+};
+
+const isDev = process.env.NODE_ENV === 'development';
+
 const STATUS_ORDER: Record<ApplicationStatus, number> = {
   pending: 0,
   approved: 1,
@@ -15,7 +28,8 @@ const STATUS_ORDER: Record<ApplicationStatus, number> = {
 };
 
 // Admin review for restaurant partner applications. Reads + updates Supabase
-// directly with the anon key (no auth yet — see the RLS note in the migration).
+// using the signed-in admin's session (RLS restricts select/update to admins —
+// see migration 0003; this page is only reachable through the AdminShell guard).
 // Pending applications are listed first.
 export function ApplicationsManager() {
   const [apps, setApps] = useState<RestaurantApplication[]>([]);
@@ -23,17 +37,55 @@ export function ApplicationsManager() {
   const [filter, setFilter] = useState<Filter>('all');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [diag, setDiag] = useState<Diagnostics | null>(null);
 
   const refresh = useCallback(async () => {
+    setActionError(null);
+
     const supabase = getSupabase();
     if (!supabase) {
+      setDiag({ configured: false, sessionExists: false, role: null, selectError: null, rowCount: 0 });
       setLoad('unconfigured');
       return;
     }
+
+    // Is there a live session, and what role does this user's profile carry?
+    // (RLS on restaurant_applications requires profiles.role = 'admin'.)
+    const { data: sessionRes } = await supabase.auth.getSession();
+    const session = sessionRes.session;
+    const sessionExists = Boolean(session);
+
+    let role: string | null = null;
+    if (session) {
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      role = (profile as { role?: string } | null)?.role ?? null;
+      if (profileErr && isDev) {
+        console.error('[applications] profile lookup error:', profileErr.message, profileErr);
+      }
+    }
+
     const { data, error } = await supabase
       .from('restaurant_applications')
       .select('*')
       .order('created_at', { ascending: false });
+
+    const rowCount = data?.length ?? 0;
+    setDiag({ configured: true, sessionExists, role, selectError: error?.message ?? null, rowCount });
+
+    // Dev-only logging (no secrets — never the anon key or tokens).
+    if (isDev) {
+      if (error) {
+        console.error('[applications] select error:', error.message, error);
+      } else {
+        console.log(
+          `[applications] select ok — ${rowCount} row(s); session=${sessionExists}; role=${role ?? 'none'}`
+        );
+      }
+    }
 
     if (error) {
       setLoad('error');
@@ -108,6 +160,7 @@ export function ApplicationsManager() {
         <p className="mt-2 text-sm text-text-secondary">
           There was a problem reaching Supabase.
         </p>
+        <DiagnosticsPanel diag={diag} />
         <button onClick={() => { setLoad('loading'); void refresh(); }} className="btn-ghost mt-4">
           Retry
         </button>
@@ -140,6 +193,10 @@ export function ApplicationsManager() {
           {actionError}
         </p>
       )}
+
+      {/* When the whole table comes back empty, show diagnostics so it's clear
+          whether it's genuinely empty or a session/role/RLS issue. */}
+      {apps.length === 0 && <DiagnosticsPanel diag={diag} />}
 
       <div className="mt-5 space-y-4">
         {visible.map((app) => (
@@ -269,6 +326,53 @@ function ActionButton({
     >
       {active ? `✓ ${label}` : label}
     </button>
+  );
+}
+
+// Admin-facing diagnostics for when applications don't show up. Surfaces the
+// exact reason: not configured, no session, wrong role (RLS hides rows), a
+// select error, or a genuinely empty table. Never exposes the anon key/tokens.
+function DiagnosticsPanel({ diag }: { diag: Diagnostics | null }) {
+  if (!diag) return null;
+
+  const hint =
+    !diag.configured
+      ? 'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then reload.'
+      : !diag.sessionExists
+        ? 'No active session — sign in again at /login.'
+        : diag.role !== 'admin'
+          ? `Signed in, but profile role is "${diag.role ?? 'none'}". RLS only returns rows to role 'admin'. Add a profiles row with role 'admin' for this user (see migration 0003).`
+          : diag.selectError
+            ? 'A select error occurred — see the message above.'
+            : diag.rowCount === 0
+              ? 'Connected as admin with no rows returned — the table is empty. Submit a test application at /partners/apply.'
+              : null;
+
+  const yn = (v: boolean) => (
+    <b className={v ? 'text-success' : 'text-danger'}>{v ? 'yes' : 'no'}</b>
+  );
+
+  return (
+    <div className="card mt-4 p-4 text-sm">
+      <div className="overline mb-2">Diagnostics</div>
+      <ul className="space-y-1 text-text-secondary">
+        <li>Supabase configured: {yn(diag.configured)}</li>
+        <li>Session exists: {yn(diag.sessionExists)}</li>
+        <li>
+          Profile role: <b className="text-cream">{diag.role ?? '—'}</b>
+        </li>
+        <li>
+          Select error:{' '}
+          <b className={diag.selectError ? 'text-danger' : 'text-text-muted'}>
+            {diag.selectError ?? 'none'}
+          </b>
+        </li>
+        <li>
+          Rows returned: <b className="text-cream">{diag.rowCount}</b>
+        </li>
+      </ul>
+      {hint && <p className="mt-3 text-text-muted">{hint}</p>}
+    </div>
   );
 }
 

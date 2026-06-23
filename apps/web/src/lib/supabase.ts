@@ -1,11 +1,13 @@
-// NOTE: The web app currently runs in MOCK-DATA mode (see src/data/catalog.ts)
-// and does not import this file at runtime. It is kept for future backend
-// integration and intentionally does NOT throw at import time, so there is no
-// requirement for the NEXT_PUBLIC_SUPABASE_* env vars while in mock mode.
+// Lazy Supabase browser client for the web app.
 //
-// Mirrors apps/customer-mobile/src/lib/supabase.ts. To switch to a real backend:
-// set the env vars, then have the data helpers call getSupabase() and query the
-// schema in apps/customer-mobile/supabase/migrations/0001_init.sql.
+// In use today by: restaurant partner applications (public submit + admin
+// review) and admin authentication (Supabase Auth email/password). The catalog
+// and admin orders still run on local mock data.
+//
+// getSupabase() returns null (and warns) when the NEXT_PUBLIC_SUPABASE_* env
+// vars are missing, so the app builds and renders without them — callers show a
+// "not configured" state instead of crashing. Anon key only; the service_role
+// key is NEVER used in the frontend.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
@@ -16,7 +18,9 @@ let client: SupabaseClient | null = null;
 
 /**
  * Lazily creates the Supabase browser client. Returns null (and warns) if env
- * vars are missing, so callers can fall back to mock data instead of crashing.
+ * vars are missing, so callers can fall back / show a configuration message
+ * instead of crashing. The session is persisted in the browser so admin auth
+ * survives reloads.
  */
 export function getSupabase(): SupabaseClient | null {
   if (client) return client;
@@ -29,7 +33,13 @@ export function getSupabase(): SupabaseClient | null {
     }
     return null;
   }
-  client = createClient(supabaseUrl, supabaseAnonKey);
+  client = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
   return client;
 }
 

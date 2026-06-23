@@ -64,6 +64,18 @@ export type MenuCategoryWithItems = MenuCategory & {
   items: MenuItem[];
 };
 
+// Auth — one profile row per Supabase Auth user (see
+// apps/web/supabase/migrations/0003_profiles_and_admin_auth.sql).
+export type UserRole = 'admin' | 'restaurant_owner' | 'rider' | 'customer' | 'user';
+
+export type Profile = {
+  id: string;
+  email: string;
+  role: UserRole;
+  created_at: string;
+  updated_at: string;
+};
+
 // Restaurant partner applications — backed by Supabase (see
 // apps/web/supabase/migrations/0002_restaurant_applications.sql).
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected';

@@ -101,6 +101,9 @@ user`. No real provider — sign-in just sets state and enters the app.
 | `/admin/restaurants` | Restaurants with live menus + availability.                          |
 | `/admin/restaurants/applications` | **Live (Supabase):** review restaurant partner applications — pending first, approve / reject / mark pending, add/edit admin notes. |
 
+All `/admin/*` routes require an **admin login** (Supabase Auth) — see §4.
+Unauthenticated visitors are redirected to `/login`; non-admins are denied.
+
 **Portals (placeholders):** `/portal/restaurant`, `/portal/rider` — "coming
 soon" surfaces for future partner/rider self-service.
 
@@ -133,33 +136,57 @@ Both apps mirror the same catalog so the demo is consistent.
 - **Currency:** PHP (`₱`). **Delivery fee:** flat `₱50`. **Payment:** Cash on
   Delivery only.
 
-### Live backend — restaurant partner applications (Supabase)
+### Live backend — admin auth + restaurant applications (Supabase)
 
-This is the **one feature wired to a real backend.** Everything else (catalog,
-admin orders) remains mock-only.
+The features wired to a real backend are **admin authentication** and
+**restaurant partner applications.** Everything else (catalog, admin orders)
+remains mock-only.
 
-- **What:** the public `/partners/apply` form inserts into a Supabase
-  `restaurant_applications` table; `/admin/restaurants/applications` reads and
-  updates them (status + admin notes).
-- **Client:** `src/lib/supabase.ts` — lazy browser client. Returns `null` when
-  env vars are unset (never throws), so the build stays green and the UI shows a
-  clear "Supabase not configured" message instead of crashing.
+- **What:**
+  - Public `/partners/apply` form inserts into `restaurant_applications` (anon).
+  - `/login` uses Supabase Auth (email/password) — **admin only**. After login
+    the app checks `profiles.role`; admins reach `/admin`, anyone else sees
+    "You do not have admin access."
+  - `/admin/restaurants/applications` reads and updates applications as the
+    signed-in admin.
+- **Client:** `src/lib/supabase.ts` (lazy browser client, persists the session)
+  and `src/lib/auth.ts` (`signInAdmin`, `fetchMyProfile`, `signOut`). The client
+  returns `null` when env vars are unset (never throws), so the build stays green
+  and the UI shows a "not configured" message instead of crashing.
 - **Required env vars** (set in `.env.local` / Vercel; see `.env.example`):
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - (browser-exposed anon key only — the `service_role` key is never used in the
     frontend.)
-- **Migration to run:** `apps/web/supabase/migrations/0002_restaurant_applications.sql`
-  (Supabase SQL editor or `supabase db push`). Creates the table, a
-  `status` check constraint (`pending` / `approved` / `rejected`), an
-  `updated_at` trigger, and RLS policies.
-- **⚠️ Temporary RLS limitation — LOCK DOWN BEFORE LAUNCH.** Real auth is not
-  implemented yet. The anon role can INSERT (the public form) **and** SELECT +
-  UPDATE (so the admin page works without login). That means anyone with the
-  anon key could read/modify applications. Before launch: add Supabase Auth + an
-  admin role (or move reads/updates to a server route using `service_role`), then
-  drop the `TEMP anon can read/update` policies. This is called out in the
-  migration's comments too.
+- **Migrations to run** (Supabase SQL editor or `supabase db push`, in order):
+  1. `apps/web/supabase/migrations/0002_restaurant_applications.sql` — table,
+     `status` check (`pending`/`approved`/`rejected`), `updated_at` trigger, RLS.
+  2. `apps/web/supabase/migrations/0003_profiles_and_admin_auth.sql` — `profiles`
+     table (role check), `is_admin()` helper, profiles RLS (read own), and
+     **locks down** `restaurant_applications` so only admins can select/update
+     (anon keeps INSERT only).
+
+#### Creating an admin (manual — no public signup)
+
+1. Supabase dashboard → **Authentication → Users → Add user** (email + password).
+2. Copy that user's **UID**.
+3. In the SQL editor, insert their profile with the admin role:
+   ```sql
+   insert into public.profiles (id, email, role)
+   values ('<user-uid>', '<user-email>', 'admin');
+   ```
+4. That user can now sign in at `/login` and reach `/admin`. (Without an admin
+   profile row, a valid login is rejected with "You do not have admin access.")
+
+#### Auth security model
+
+- **RLS is the real boundary.** `restaurant_applications` select/update require
+  `is_admin()`; `profiles` lets a user read only their own row. The anon key can
+  only INSERT applications.
+- **Route protection is client-side** (`AdminShell`): unauthenticated users are
+  redirected to `/login`, non-admins get a denial screen. This matches the app's
+  static/SPA architecture (no required env vars at build). Cookie-based
+  middleware would need `@supabase/ssr`; data is safe either way thanks to RLS.
 
 ---
 
@@ -175,9 +202,9 @@ static/SSG.
    - `NEXT_PUBLIC_SITE_URL` — canonical production URL for absolute Open
      Graph / Twitter preview URLs (falls back to `VERCEL_URL`, then a default).
    - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — needed at
-     runtime for the **restaurant applications** feature (submit + admin review).
-     Without them the rest of the site is unaffected and the applications UI
-     shows a "not configured" message. Anon key only — never the service_role.
+     runtime for **admin login** and the **restaurant applications** feature.
+     Without them the public site is unaffected; `/login` and the applications UI
+     show a "not configured" message. Anon key only — never the service_role.
 4. Deploy. Pushes to the production branch redeploy automatically.
 
 CLI alternative:
@@ -210,12 +237,14 @@ shared logo; favicon / apple-touch-icon use the same logo asset.
 
 ## 6. Known limitations
 
-- **Mostly mock.** The only live backend is **restaurant partner applications**
-  (Supabase). No customer orders, rider applications, real auth, payments, or
-  live order tracking yet. Auth is UI state; "Track Order" returns home.
-- **Applications RLS is temporary.** The anon role can read/update applications
-  because there's no admin auth yet — must be locked down before launch (see §4
-  and the migration comments).
+- **Mostly mock.** Live backends are **admin auth** and **restaurant partner
+  applications** (Supabase). No customer orders, rider applications, customer /
+  restaurant / rider login, payments, or live order tracking yet. The mobile
+  app's "auth" is still UI state; "Track Order" returns home.
+- **Admin route protection is client-side** (`AdminShell`), not middleware — the
+  real enforcement is Supabase RLS (admin-only policies). See §4.
+- **Admins are provisioned manually** (no public signup): create the user in
+  Supabase Auth, then insert a `profiles` row with `role = 'admin'` (see §4).
 - **No shared package.** The design system and `types/database.ts` are
   duplicated across apps and kept in sync by hand.
 - **Mobile order state is in-memory.** The cart persists (AsyncStorage), but the
@@ -232,15 +261,15 @@ shared logo; favicon / apple-touch-icon use the same logo asset.
 
 ## 7. Next phases
 
-0. **Done (this phase):** restaurant partner applications on Supabase
-   (public submit + admin review). See §4.
+0. **Done:** restaurant partner applications on Supabase (public submit + admin
+   review) **and admin authentication** (Supabase Auth + `profiles.role`,
+   RLS-locked, client-guarded `/admin`). See §4.
 1. **Rider applications (next).** Mirror the restaurant-applications pattern: a
    `rider_applications` table + migration, wire `/riders/apply` to Supabase, and
    add a `/admin/riders/applications` review page.
-2. **Lock down applications RLS + real authentication.** Add Supabase Auth + an
-   admin role (or a server route using `service_role`), then replace the
-   temporary anon read/update policies. Replace the mock `authStore` / `/login`
-   and guard customer + admin routes.
+2. **More roles + hardening.** Restaurant-owner and rider login on top of the
+   existing `profiles.role`; optionally move admin route protection to
+   cookie-based middleware (`@supabase/ssr`) for server-side enforcement.
 3. **Customer orders on Supabase.** Run the customer migration
    (`apps/customer-mobile/supabase/migrations/0001_init.sql`) + seed and swap the
    `src/data` helpers for `getSupabase()` queries.
