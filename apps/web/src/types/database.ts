@@ -63,3 +63,35 @@ export type OrderItem = {
 export type MenuCategoryWithItems = MenuCategory & {
   items: MenuItem[];
 };
+
+// Restaurant partner applications — backed by Supabase (see
+// apps/web/supabase/migrations/0002_restaurant_applications.sql).
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+export type RestaurantApplication = {
+  id: string;
+  business_name: string;
+  owner_name: string;
+  phone: string;
+  email: string;
+  address: string;
+  cuisine_type: string;
+  facebook_page: string | null;
+  website: string | null;
+  status: ApplicationStatus;
+  admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Shape inserted by the public application form (DB fills the rest).
+export type RestaurantApplicationInsert = {
+  business_name: string;
+  owner_name: string;
+  phone: string;
+  email: string;
+  address: string;
+  cuisine_type: string;
+  facebook_page: string | null;
+  website: string | null;
+};

@@ -8,6 +8,7 @@ const NAV: { href: string; label: string; icon: string }[] = [
   { href: '/admin', label: 'Dashboard', icon: '▤' },
   { href: '/admin/orders', label: 'Orders', icon: '🧾' },
   { href: '/admin/restaurants', label: 'Restaurants', icon: '🍽' },
+  { href: '/admin/restaurants/applications', label: 'Restaurant Applications', icon: '📝' },
 ];
 
 export function AdminSidebar() {
@@ -19,8 +20,9 @@ export function AdminSidebar() {
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {NAV.map((item) => {
-          const active =
-            item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
+          // Exact match so a parent route (e.g. /admin/restaurants) doesn't also
+          // highlight when on a child route (/admin/restaurants/applications).
+          const active = pathname === item.href;
           return (
             <Link
               key={item.href}

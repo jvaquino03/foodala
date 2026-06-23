@@ -99,6 +99,7 @@ user`. No real provider — sign-in just sets state and enters the app.
 | `/admin`             | KPI cards (revenue / active / delivered) + recent orders.            |
 | `/admin/orders`      | Filter by status, expand line items + delivery details, advance order status (mutates in-memory mock state). |
 | `/admin/restaurants` | Restaurants with live menus + availability.                          |
+| `/admin/restaurants/applications` | **Live (Supabase):** review restaurant partner applications — pending first, approve / reject / mark pending, add/edit admin notes. |
 
 **Portals (placeholders):** `/portal/restaurant`, `/portal/rider` — "coming
 soon" surfaces for future partner/rider self-service.
@@ -132,6 +133,34 @@ Both apps mirror the same catalog so the demo is consistent.
 - **Currency:** PHP (`₱`). **Delivery fee:** flat `₱50`. **Payment:** Cash on
   Delivery only.
 
+### Live backend — restaurant partner applications (Supabase)
+
+This is the **one feature wired to a real backend.** Everything else (catalog,
+admin orders) remains mock-only.
+
+- **What:** the public `/partners/apply` form inserts into a Supabase
+  `restaurant_applications` table; `/admin/restaurants/applications` reads and
+  updates them (status + admin notes).
+- **Client:** `src/lib/supabase.ts` — lazy browser client. Returns `null` when
+  env vars are unset (never throws), so the build stays green and the UI shows a
+  clear "Supabase not configured" message instead of crashing.
+- **Required env vars** (set in `.env.local` / Vercel; see `.env.example`):
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - (browser-exposed anon key only — the `service_role` key is never used in the
+    frontend.)
+- **Migration to run:** `apps/web/supabase/migrations/0002_restaurant_applications.sql`
+  (Supabase SQL editor or `supabase db push`). Creates the table, a
+  `status` check constraint (`pending` / `approved` / `rejected`), an
+  `updated_at` trigger, and RLS policies.
+- **⚠️ Temporary RLS limitation — LOCK DOWN BEFORE LAUNCH.** Real auth is not
+  implemented yet. The anon role can INSERT (the public form) **and** SELECT +
+  UPDATE (so the admin page works without login). That means anyone with the
+  anon key could read/modify applications. Before launch: add Supabase Auth + an
+  admin role (or move reads/updates to a server route using `service_role`), then
+  drop the `TEMP anon can read/update` policies. This is called out in the
+  migration's comments too.
+
 ---
 
 ## 5. Vercel deployment (`apps/web`)
@@ -142,11 +171,13 @@ static/SSG.
 1. Import the repo into Vercel (New Project).
 2. **Set Root Directory to `apps/web`** — the only required setting. Vercel
    auto-detects Next.js (Build: `next build`, Install: `npm install`).
-3. **Env vars: none required.** Optional:
+3. **Env vars: none required to build/deploy.** Optional:
    - `NEXT_PUBLIC_SITE_URL` — canonical production URL for absolute Open
      Graph / Twitter preview URLs (falls back to `VERCEL_URL`, then a default).
-   - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — only for a
-     future real backend.
+   - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — needed at
+     runtime for the **restaurant applications** feature (submit + admin review).
+     Without them the rest of the site is unaffected and the applications UI
+     shows a "not configured" message. Anon key only — never the service_role.
 4. Deploy. Pushes to the production branch redeploy automatically.
 
 CLI alternative:
@@ -179,8 +210,12 @@ shared logo; favicon / apple-touch-icon use the same logo asset.
 
 ## 6. Known limitations
 
-- **Mock-only.** No backend, database, real authentication, payments, or live
-  rider/order tracking. Auth is UI state; "Track Order" returns home.
+- **Mostly mock.** The only live backend is **restaurant partner applications**
+  (Supabase). No customer orders, rider applications, real auth, payments, or
+  live order tracking yet. Auth is UI state; "Track Order" returns home.
+- **Applications RLS is temporary.** The anon role can read/update applications
+  because there's no admin auth yet — must be locked down before launch (see §4
+  and the migration comments).
 - **No shared package.** The design system and `types/database.ts` are
   duplicated across apps and kept in sync by hand.
 - **Mobile order state is in-memory.** The cart persists (AsyncStorage), but the
@@ -188,28 +223,33 @@ shared logo; favicon / apple-touch-icon use the same logo asset.
   reset on refresh.
 - **Photography depends on external CDNs** (TheMealDB / TheCocktailDB) at view
   time; images won't render fully offline.
-- **Portals are placeholders** (`/portal/*`) and recruit forms are non-submitting
-  mock forms.
+- **Portals are placeholders** (`/portal/*`). The **rider** apply form is still a
+  non-submitting mock (`MockForm`); only the **restaurant** apply form is wired
+  to Supabase.
 - **Single city / single currency / COD only** by design for Phase 1.
 
 ---
 
 ## 7. Next phases
 
-1. **Backend integration (Supabase).** Run the existing migration
-   (`apps/customer-mobile/supabase/migrations/0001_init.sql`) + seed, set the
-   `*_SUPABASE_*` env vars, and swap the `src/data` helpers for `getSupabase()`
-   queries. The lazy clients (`src/lib/supabase.ts`) already no-op safely when
-   unset.
-2. **Real authentication.** Replace the mock `authStore` / `/login` with
-   Supabase Auth (email + social), guard customer + admin routes.
-3. **Payments.** Add an online payment method alongside COD at checkout.
-4. **Live order tracking.** Real order lifecycle + rider assignment and a
+0. **Done (this phase):** restaurant partner applications on Supabase
+   (public submit + admin review). See §4.
+1. **Rider applications (next).** Mirror the restaurant-applications pattern: a
+   `rider_applications` table + migration, wire `/riders/apply` to Supabase, and
+   add a `/admin/riders/applications` review page.
+2. **Lock down applications RLS + real authentication.** Add Supabase Auth + an
+   admin role (or a server route using `service_role`), then replace the
+   temporary anon read/update policies. Replace the mock `authStore` / `/login`
+   and guard customer + admin routes.
+3. **Customer orders on Supabase.** Run the customer migration
+   (`apps/customer-mobile/supabase/migrations/0001_init.sql`) + seed and swap the
+   `src/data` helpers for `getSupabase()` queries.
+4. **Payments.** Add an online payment method alongside COD at checkout.
+5. **Live order tracking.** Real order lifecycle + rider assignment and a
    customer-facing tracking screen (replace the stub "Track Order").
-5. **Partner & rider portals.** Build out `/portal/restaurant` and
+6. **Partner & rider portals.** Build out `/portal/restaurant` and
    `/portal/rider` into real self-service dashboards; wire the apply forms.
-6. **Shared design package.** Extract the brand tokens (and `types/database.ts`)
+7. **Shared design package.** Extract the brand tokens (and `types/database.ts`)
    into a shared workspace package to remove hand-syncing.
-7. **Multi-city / i18n / multiple currencies** as the product expands beyond
+8. **Multi-city / i18n / multiple currencies** as the product expands beyond
    Davao City.
-```
