@@ -47,6 +47,13 @@ dark surface ramp (`#111` → `#1A1A1A` → `#242424`). Bold, tightly-tracked
 headings; clean system sans body; pill buttons; rounded cards with soft
 shadows. Dark-mode-first throughout.
 
+**Logo (one shared master).** The approved logo lives once at
+`assets/branding/foodala-logo*.png` and is **symlinked** into each app
+(`apps/customer-mobile/assets/images/` and `apps/web/public/`) — no duplicate
+copies. Both apps render the identical artwork in the header, login, footer
+(web), splash/icon (mobile), favicon, and the web OG image. Change it in one
+place to update everywhere.
+
 ---
 
 ## 2. `apps/customer-mobile` routes (Expo Router, `app/`)
@@ -161,8 +168,8 @@ npm run build       # next build — should print ○/● for all routes, no err
 
 **SEO / social:** title + description + per-page title template, Open Graph and
 Twitter (`summary_large_image`) tags live in `app/layout.tsx`;
-`app/opengraph-image.tsx` renders a branded 1200×630 PNG at build (no binary
-asset); favicon is an inline SVG data-URI.
+`app/opengraph-image.tsx` renders a branded 1200×630 PNG at build that embeds the
+shared logo; favicon / apple-touch-icon use the same logo asset.
 
 > The Expo app is **not** deployed to Vercel. It's run via Expo Go / simulators
 > (`npm start` in `apps/customer-mobile`), or exported to web with

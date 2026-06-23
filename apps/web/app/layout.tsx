@@ -30,8 +30,13 @@ export const metadata: Metadata = {
     'cash on delivery',
   ],
   authors: [{ name: 'Foodala' }],
+  // Favicon + app icon sourced from the SAME approved logo asset as mobile
+  // (served from /public via a symlink to /assets/branding). One brand mark
+  // everywhere — browser tab, bookmarks, and iOS home screen.
   icons: {
-    icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%23C40000%22/><text x=%2216%22 y=%2222%22 font-size=%2220%22 font-family=%22sans-serif%22 font-weight=%22800%22 fill=%22white%22 text-anchor=%22middle%22>F</text></svg>',
+    icon: '/foodala-logo-transparent.png',
+    shortcut: '/foodala-logo-transparent.png',
+    apple: '/foodala-logo-transparent.png',
   },
   openGraph: {
     type: 'website',

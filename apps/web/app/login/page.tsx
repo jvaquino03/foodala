@@ -34,7 +34,7 @@ export default function LoginPage() {
       {/* Form */}
       <div className="flex flex-col justify-center px-5 py-12 sm:px-12">
         <div className="mx-auto w-full max-w-sm">
-          <Logo />
+          <Logo size="lg" />
           <h1 className="mt-8 text-3xl font-extrabold tracking-tight">Welcome back</h1>
           <p className="mt-2 text-text-secondary">Sign in to continue.</p>
 

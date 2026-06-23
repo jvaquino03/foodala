@@ -71,9 +71,23 @@ vercel --prod     # promote a production deployment
 - Title + description and a templated per-page title live in `app/layout.tsx`.
 - Open Graph + Twitter (`summary_large_image`) tags are set there too.
 - `app/opengraph-image.tsx` generates a branded 1200×630 share image at build
-  time with `next/og` — no binary asset to maintain, prerendered statically.
-- The favicon is an inline SVG data-URI (the red Foodala "F"), so there is no
-  external icon file to host.
+  time with `next/og`, embedding the shared Foodala logo. Prerendered statically.
+- The favicon / apple-touch-icon use the same approved logo asset.
+
+### Branding asset (single source of truth)
+
+The Foodala logo is **one shared master**, not duplicated per app:
+
+```
+foodala/assets/branding/
+  foodala-logo.png              # opaque master
+  foodala-logo-transparent.png  # transparent master (used everywhere)
+```
+
+`apps/web/public/foodala-logo-transparent.png` is a **symlink** to that master
+(as is the mobile app's copy), so the website header, footer, login, admin
+sidebar, favicon, and OG image all render the exact same artwork the mobile app
+ships. To change the logo, replace the file in `assets/branding/` once.
 
 ## What's inside
 

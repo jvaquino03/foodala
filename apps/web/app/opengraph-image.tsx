@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 
-// Branded social-share card, generated at build time with next/og so there is
-// no binary image asset to ship or keep in sync. Mirrors the Foodala dark brand
-// (near-black background, Foodala Red mark, warm cream + soft gold accents).
-// Next auto-wires this as the default Open Graph + Twitter image for every page.
+// Branded social-share card, generated at build time with next/og. It embeds the
+// SAME approved Foodala logo the rest of the site and the mobile app use (read
+// from /public, which symlinks to the shared master at /assets/branding), so the
+// brand mark is identical everywhere. Next auto-wires this as the default Open
+// Graph + Twitter image for every page.
 
 // Default (Node.js) runtime so Next prerenders this to a static PNG at build
 // time — no on-demand server function and no runtime env dependency.
@@ -11,7 +14,19 @@ export const alt = 'Foodala — Premium food delivery in Davao City';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
+// Inline the logo as a data URI at build time. Wrapped in try/catch so the OG
+// build never fails even if the asset is ever missing (falls back to null).
+function loadLogo(): string | null {
+  try {
+    const file = readFileSync(join(process.cwd(), 'public', 'foodala-logo-transparent.png'));
+    return `data:image/png;base64,${file.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
 export default function OpengraphImage() {
+  const logo = loadLogo();
   return new ImageResponse(
     (
       <div
@@ -27,22 +42,27 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <div
-            style={{
-              width: 96,
-              height: 96,
-              borderRadius: 24,
-              background: '#C40000',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-              fontSize: 60,
-              fontWeight: 800,
-            }}
-          >
-            F
-          </div>
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt="Foodala" width={140} height={133} />
+          ) : (
+            <div
+              style={{
+                width: 120,
+                height: 120,
+                borderRadius: 28,
+                background: '#C40000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                fontSize: 72,
+                fontWeight: 800,
+              }}
+            >
+              F
+            </div>
+          )}
           <div
             style={{
               fontSize: 64,
